@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "serviimo-gate",
+    "serviimo-office",
+    "serviimo-cdn",
+    "serviimo-world",
+    "serviimo-store",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+
+[package]
+name = "serviimo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serviimo-gate = { path = "serviimo-gate" }
+serviimo-office = { path = "serviimo-office" }
+serviimo-cdn = { path = "serviimo-cdn" }
+serviimo-world = { path = "serviimo-world" }
+serviimo-store = { path = "serviimo-store" }
+
+# apiimo-network is consumed by path once Serviimo lives next to Apiimo_src;
+# see REPORT.md section "Reuse from Apiimo".
+# apiimo-network = { path = "../Apiimo_src/apiimo-network" }
