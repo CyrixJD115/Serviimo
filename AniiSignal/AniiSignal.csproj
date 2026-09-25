@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <!-- Exe, not Library: this assembly carries a Main so the redirect
+         self-check can run without launching the game. MelonLoader loads it
+         as a library in-game, where Main is never reached. -->
+    <OutputType>Exe</OutputType>
+    <LangVersion>10</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>AniiSignal</AssemblyName>
+    <RootNamespace>AniiSignal</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>0.1.0</Version>
+    <Company>Serviimo</Company>
+    <Product>AniiSignal</Product>
+    <Description>Client-side companion for a personal-use Aniimo server. Redirects the game at Serviimo without altering the wire protocol.</Description>
+    <!-- MelonLoader 0.6.6 net6 assemblies. Resolved by tools/build-mod.sh; a
+         bare `dotnet build` uses whatever is already in lib/. -->
+    <MelonLibDir Condition="'$(MelonLibDir)' == ''">$(MSBuildThisFileDirectory)lib</MelonLibDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(MelonLibDir)/MelonLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(MelonLibDir)/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
