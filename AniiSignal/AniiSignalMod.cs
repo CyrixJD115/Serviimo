@@ -1,100 +1,51 @@
 // AniiSignal - the client half of Serviimo.
 //
 // A MelonLoader mod whose only job is to make an unmodified Aniimo client
-// connect to a personal-use server instead of FunPlus. See ../PLAN.md section
-// 3 for the vanilla/mod split and the rules this mod follows:
+// connect to a personal-use server instead of FunPlus. See ../PLAN.md
+// section 3 for the full vanilla/mod split.
 //
-//   1. The mod changes WHERE the client connects, never WHAT it sends.
-//   2. Vanilla (no mod) stays the acceptance test for the server.
-//   3. Every hook degrades to a log line instead of throwing during load, so a
-//      missing target in a game update costs a feature, not the session.
+// The rules this mod follows, and why:
 //
-// Hooks, in the order they matter:
-//   - EndpointRedirect  override the CDN and office base URLs
-//   - GateKeyInjector   hand the client our public key in place of FunPlus's
-//   - AntiCheatStub     return a dummy token so the SDK stops phoning home
+//  1. It changes WHERE the client connects, never WHAT it sends. No payload
+//     is rewritten anywhere in this project. A mod that edits messages makes
+//     every later bug ambiguous between a Serviimo defect and a mod defect.
+//
+//  2. The vanilla path (no mod) stays the acceptance test for the server. The
+//     mod is an accelerator for the three painful edges of that path - the
+//     wine CA install, the patcher clobbering our XDF, and HTPSec phoning
+//     home - not a dependency.
+//
+//  3. Every hook degrades to a log line instead of throwing during load, so a
+//     game update that moves a target costs a feature, not the whole session.
+//
+// IL2CPP constraint, and the thing that shapes every file here: Aniimo ships
+// no Managed/ assemblies, so game types do not exist at compile time and
+// Harmony cannot bind to them by Type. Game-side hooks must resolve their
+// targets by name from the runtime interop types, which is why they cannot be
+// written as [HarmonyPatch] attributes against real types. BCL types are
+// unaffected and bind normally.
+//
+// Status: folder foundation, comments only. Nothing implemented yet.
 
-using System;
-using System.Reflection;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(AniiSignal.AniiSignalMod), "AniiSignal", "0.1.0", "Serviimo")]
+// MelonGame values read from the globalgamemanagers header rather than
+// guessed: companyName and productName are both "Aniimo".
 [assembly: MelonGame("Aniimo", "Aniimo")]
 
 namespace AniiSignal
 {
-    /// <summary>
-    /// Entry point when the assembly is run directly, which is how the
-    /// self-check gets exercised without launching the game:
-    ///
-    ///   dotnet AniiSignal.dll --selfcheck
-    ///
-    /// MelonLoader loads the assembly as a library in game, so a Main here is
-    /// never reached there.
-    /// </summary>
-    public static class EntryPoint
-    {
-        public static int Main(string[] args)
-        {
-            if (args.Length > 0 && args[0] == "--selfcheck")
-                return SelfCheck.Run() == 0 ? 0 : 1;
-
-            Console.WriteLine("AniiSignal - MelonLoader mod. Run with --selfcheck, or see ../PLAN.md.");
-            return 0;
-        }
-    }
-
+    // Entry point. Loads the config, then applies each hook in isolation so
+    // one failure cannot take down the rest.
+    //
+    // Apply order matters: the client reads the gate key while parsing config,
+    // which happens while the first endpoint request is being built, so the
+    // key must be in place before anything is allowed to dial out.
+    //
+    //   1. GateKeyInjector   our public key in place of FunPlus's
+    //   2. EndpointRedirect  CDN and office base URLs
+    //   3. AntiCheatStub     dummy token so the SDK stops phoning home
     public class AniiSignalMod : MelonMod
     {
-        public override void OnInitializeMelon()
-        {
-            if (Environment.GetEnvironmentVariable("ANIISIGNAL_SELFCHECK") == "1")
-            {
-                var failures = SelfCheck.Run();
-                if (failures > 0)
-                    MelonLogger.Error($"AniiSignal: selfcheck reported {failures} failure(s)");
-            }
-
-            var config = AniiSignalConfig.Load();
-
-            MelonLogger.Msg("--------------------------------------------------");
-            MelonLogger.Msg($"AniiSignal 0.1.0 up");
-            MelonLogger.Msg($"  config    : {AniiSignalConfig.ConfigPath}");
-            MelonLogger.Msg($"  cdn       : {config.CdnBaseUrl}");
-            MelonLogger.Msg($"  office    : {config.OfficeBaseUrl}");
-            MelonLogger.Msg($"  gate key  : {(string.IsNullOrEmpty(config.GatePublicKeyPem) ? "(none)" : $"{config.GatePublicKeyPem.Length} bytes")}");
-            MelonLogger.Msg("--------------------------------------------------");
-
-            // Order matters: the client reads the gate key while parsing config,
-            // which happens while the first endpoint request is being built. Get
-            // the key in place before anything is allowed to dial out.
-            if (config.InjectGateKey)
-                Safe("gate key injection", () => GateKeyInjector.Apply(config));
-
-            if (config.RedirectEndpoints)
-                Safe("endpoint redirect", () => EndpointRedirect.Apply(config));
-
-            if (config.StubAntiCheat)
-                Safe("anti-cheat stub", () => AntiCheatStub.Apply());
-
-            MelonLogger.Msg("AniiSignal: ready");
-        }
-
-        /// <summary>
-        /// Runs one hook in isolation. A hook that throws here would abort
-        /// MelonLoader's load phase and cost us every other hook, so nothing
-        /// propagates.
-        /// </summary>
-        private static void Safe(string what, System.Action action)
-        {
-            try
-            {
-                action();
-            }
-            catch (System.Exception ex)
-            {
-                MelonLogger.Error($"AniiSignal: {what} failed and is disabled: {ex}");
-            }
-        }
     }
 }

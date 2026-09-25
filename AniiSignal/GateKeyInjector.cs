@@ -6,84 +6,33 @@
 // OUR key, or the client encrypts its session key to FunPlus and the gate
 // never sees anything readable.
 //
-// Two ways to get it there:
-//   - the CDN repack (Plan section 7): rewrite the XDF, works with a fully
-//     vanilla client, but the patcher can overwrite it
-//   - this hook: return our conf.json in memory as the config is read, so
-//     there is nothing on disk to clobber
+// Two routes to get our key in, and they are not exclusive:
 //
-// The hook is a stub on purpose. Binding to the game's config reader needs
-// the IL2CPP interop type, which only exists once MelonLoader has generated
-// its proxy assemblies at runtime. Rather than guess a method name that would
-// silently never bind, the resolution is left as the one clearly marked step
-// below and the mod reports what it needs.
-
-using System;
-using MelonLoader;
+//   - the CDN repack (PLAN.md section 7): rewrite the XDF and serve it. Works
+//     with a fully vanilla client, but the patcher can overwrite the file on
+//     the next content update.
+//
+//   - this hook: return our conf.json in memory as the config is read, so
+//     there is nothing on disk to clobber. This is the better long-term
+//     answer, and the reason the vanilla path is not a hard prerequisite.
+//
+// The repack is currently the blocker - nothing in the workspace can write an
+// XDF yet (XdfContainer is read-only). Until it exists this hook is the only
+// route, which is why it is worth finishing first.
+//
+// What it needs: locate the type that owns the conf.json read, Harmony-patch
+// the getter returning that string, and return our JSON with pubKeyData
+// replaced. Candidate holders seen in the disassembly and Lua layer are
+// NetHandler (builds the gate config from Data.sys_config_data),
+// XPatchRemoteConfigMgr, and ClientConfig.
+//
+// Validate the PEM at load rather than mid-handshake. A malformed key would
+// otherwise surface much later as an unreadable session, which is a far more
+// confusing symptom than a startup error.
 
 namespace AniiSignal
 {
     public static class GateKeyInjector
     {
-        // Candidate type names seen in the disassembly and the Lua layer. The
-        // first one that resolves at runtime wins; this is the only place that
-        // needs a real name once we can read the interop types.
-        private static readonly string[] ConfigHolderTypes =
-        {
-            "NetHandler",
-            "XPatchRemoteConfigMgr",
-            "ClientConfig",
-        };
-
-        public static void Apply(AniiSignalConfig config)
-        {
-            if (string.IsNullOrWhiteSpace(config.GatePublicKeyPem))
-            {
-                MelonLogger.Warning(
-                    "AniiSignal: InjectGateKey is on but GatePublicKeyPem is empty; " +
-                    "falling back to the CDN repack path (PLAN.md section 7)");
-                return;
-            }
-
-            ValidatePem(config.GatePublicKeyPem);
-
-            // TODO(RE): bind here once the IL2CPP proxy assemblies can be
-            // inspected at runtime. The work is: locate the type above, Harmony-
-            // patch the getter that returns the conf.json string, and return
-            // our JSON with pubKeyData replaced. Nothing about the handshake
-            // changes - only where the key comes from.
-            MelonLogger.Msg(
-                "AniiSignal: gate key ready to inject but the interop binding is " +
-                "not written yet; use the CDN repack for now");
-
-            foreach (var name in ConfigHolderTypes)
-                MelonLogger.Msg($"AniiSignal:   candidate config holder: {name}");
-        }
-
-        /// <summary>
-        /// Fails loudly at load rather than mid-handshake. A malformed PEM here
-        /// would otherwise surface as an unreadable session much later.
-        /// </summary>
-        private static void ValidatePem(string pem)
-        {
-            var body = pem
-                .Replace("-----BEGIN PUBLIC KEY-----", "")
-                .Replace("-----END PUBLIC KEY-----", "")
-                .Replace("-----BEGIN RSA PUBLIC KEY-----", "")
-                .Replace("-----END RSA PUBLIC KEY-----", "")
-                .Replace("-----BEGIN CERTIFICATE-----", "")
-                .Replace("-----END CERTIFICATE-----", "")
-                .Replace("\n", "")
-                .Replace("\r", "")
-                .Trim();
-
-            if (body.Length == 0)
-                throw new ArgumentException("GatePublicKeyPem contains no base64 body");
-            if (body.Length % 4 != 0)
-                throw new ArgumentException(
-                    $"GatePublicKeyPem base64 length {body.Length} is not a multiple of 4");
-
-            MelonLogger.Msg($"AniiSignal: gate public key looks sane ({body.Length} base64 chars)");
-        }
     }
 }
