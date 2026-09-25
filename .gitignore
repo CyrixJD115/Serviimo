@@ -5,3 +5,10 @@ AniiSignal/bin/
 AniiSignal/obj/
 AniiSignal/build/
 AniiSignal/lib/
+
+# Runtime state and generated endpoint configuration stay out of source control.
+serviimo-data/
+cdn-root/
+serviimo.json
+aniisignal-config.json
+AniiSignal/AniiSignal.json

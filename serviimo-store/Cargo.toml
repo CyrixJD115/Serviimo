@@ -5,3 +5,5 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# Bundled SQLite makes local persistence independent of a host SQLite install.
+rusqlite = { version = "0.32", features = ["bundled"] }

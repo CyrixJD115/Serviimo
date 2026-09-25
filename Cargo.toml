@@ -26,7 +26,11 @@ serviimo-office = { path = "serviimo-office" }
 serviimo-cdn = { path = "serviimo-cdn" }
 serviimo-world = { path = "serviimo-world" }
 serviimo-store = { path = "serviimo-store" }
-
-# apiimo-network is consumed by path once Serviimo lives next to Apiimo_src;
-# see PLAN.md section "Reuse from Apiimo".
-# apiimo-network = { path = "../Apiimo_src/apiimo-network" }
+# The binary shares the workspace's protocol and published schema dependency.
+apiimo-network = { path = "../Apiimo_src/apiimo-network" }
+# ctrlc handles the requested SIGINT/Ctrl-C shutdown path.
+ctrlc = "3"
+# Serde loads the shared JSON configuration and applies defaults to omitted fields.
+serde = { version = "1", features = ["derive"] }
+# serde_json reads configuration and writes the AniiSignal runtime file.
+serde_json = "1"

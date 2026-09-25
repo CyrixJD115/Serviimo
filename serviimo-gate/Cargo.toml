@@ -5,3 +5,15 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# Apiimo supplies the verified protobuf, RPC, and handshake data types.
+apiimo-network = { path = "../../Apiimo_src/apiimo-network" }
+# flate2 keeps one zlib state per direction and emits level-0 sync-flushed data.
+flate2 = "1"
+# rand creates per-connection tokens and RSA randomness.
+rand = "0.8"
+# rsa generates the gate key and decrypts client key exchanges with OAEP-SHA1.
+rsa = { version = "0.9", features = ["sha1"] }
+# serde_json Value is passed through Apiimo's MessagePack parameter codec.
+serde_json = "1"
+# sha1 is the digest selected by the game for RSA-OAEP.
+sha1 = "0.10"

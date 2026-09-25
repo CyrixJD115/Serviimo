@@ -5,3 +5,5 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# Reuse Apiimo's connectServer and CS_Login message types for the world stub.
+apiimo-network = { path = "../../Apiimo_src/apiimo-network" }

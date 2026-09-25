@@ -1,7 +1,7 @@
 # Serviimo - a personal-use Aniimo server: feasibility and plan
 
 Date: 2026-09-25 (rewritten; supersedes the 2026-09-22 draft that was called REPORT.md)
-Status: skeleton only (this directory has stub crates + this plan)
+Status: foundation implemented; local services compile, but the game flow is not end-to-end.
 Companion reports, all in the parent workspace:
   ../.reports/PROJECT-REPORT.md                        game-wide RE, anti-cheat, endpoints
   ../.reports/REPORT.md                                 the full Aniimo RE report
@@ -34,8 +34,9 @@ times. Two of the corrections invalidate work items outright.
    keystream per direction wrapping one continuous zlib stream per
    direction, sync-flushed per message, with the
    `[u32 len][u16 method][protobuf]` frames living *inside* the
-   inflated chunk. `apiimo-network/src/session.rs` implements this and
-   is the reference.
+   inflated chunk. The checked-out Apiimo revision does not contain the
+   referenced session.rs; its current client.rs only models plain framing.
+   See section 9 for the source findings.
 4. The save stream is not protobuf either. It is phonestcore's
    `PropertySync` `LuaLazyDecoder` - schema-bundled lazy MessagePack
    (`mp_lazy_encode`/`decode_client`, `DeclareBundle`), symbols around
@@ -155,40 +156,30 @@ lose the ability to tell a Serviimo bug from a mod bug.
 | serviimo-store   | SQLite persistence (accounts + world saves)    |
 | serviimo-mod     | the optional MelonLoader client mod (section 3) |
 
-Reuse from Apiimo (enable the path dependency when ready):
-`apiimo-network` gives framing, `PbMessage`, `rc4`, the handshake
-types, `ServerListPublish` serde types, identity types, the vendored
-`.proto` files, and `LiveSession` - which is the *client* half but
-doubles as an executable specification of what the server half must
-answer. `serviimo-gate` is the listener counterpart: where
-`LiveSession::establish` sends method 1 and expects 19+10, the gate
-sends 19+10 and waits for 1.
-
-Enable it by uncommenting the path dependency in the root
-`Cargo.toml`:
-
-```toml
-apiimo-network = { path = "../Apiimo_src/apiimo-network" }
-```
+Apiimo's apiimo-network path dependency is enabled in the root workspace.
+It supplies the plain frame codec, PbMessage, one-shot rc4, handshake and RPC
+types, ServerListPublish serde types, identity types, and vendored proto files.
+The current crate exposes GateConnection as a client probe; it does not expose
+LiveSession or a server-side stream codec. Serviimo implements its own server
+listener and continuous session codec while reusing the published wire types.
 
 ## 5. Tiered roadmap
 
 Tier 1 - "online" (days)
-  [ ] enable the apiimo-network path dependency
-  [ ] generate an RSA keypair for the gate
+  [x] enable the apiimo-network path dependency
+  [x] generate and persist an RSA keypair for the gate
   [ ] rebuild LuaScripts.xdf with our public key as
       `xfs/luascripts/Network/conf.json` -> `pubKeyData`
       (BLOCKER, see section 7: apiimo can read XDF but not write it)
-  [ ] serviimo-cdn serves a server_list_publish.json whose
+  [x] serviimo-cdn serves a generated server_list_publish.json whose
       msGateAddrList points at our gate
-  [ ] serviimo-gate: answer method 1 with method 19 (gate info) +
+  [x] serviimo-gate: answer method 1 with method 19 (gate info) +
       method 10 (responseEncryptToken, 64-bit token); accept method 2
-      by RSA-decrypting keyString with our PRIVATE key and logging the
-      recovered 20-byte RC4 key
-  [ ] stand up the continuous RC4 + continuous zlib transport, both
-      directions, mirroring session.rs
-  [ ] answer `LoginService.verifySdk` (MsRequest, msgpack fixarray
-      params) with a status + Token + role list
+      with RSA-OAEP-SHA1 and validate the recovered 20-byte RC4 key
+  [x] stand up continuous RC4 + continuous zlib transport in both
+      directions according to the wire behavior specified above
+  [x] answer LoginService.verifySdk (MsRequest, msgpack fixarray
+      params) with a stub status, Token, and role list
   [ ] point the client at our CDN (hosts entry + local CA in the
       Proton prefix) and get the game's own login screen to complete
   [ ] THEN, in parallel: the mod's endpoint-override hook, so the
@@ -196,13 +187,13 @@ Tier 1 - "online" (days)
 Success test: the unmodified client logs in against serviimo.
 
 Tier 2 - world entry + persistence (weeks)
-  [ ] world gate: connectServer (158 B, carries the token from the
-      verifySdk response) then `RoleService.CS_Login` (fixarray5 params)
+  [x] world-gate request types and RoleService.CS_Login router entry;
+      world-gate behavior and simulation remain unimplemented
   [ ] decode-and-log every post-login frame - we hold the key, so
       every entity/property message is readable
   [ ] property-sync schema extraction from the client Lua
       (sendPropertyDeclare carries the schema itself)
-  [ ] SQLite accounts + world-part saves
+  [x] SQLite account and world-state schema with upsert methods
   [ ] static entity spawns; two clients see each other
   [ ] mod: HTPSec stub, so an injected client is not self-reporting
 
@@ -236,10 +227,11 @@ open-ended.
   ("kcp is forbidden, switch to tcp"). The Apiimo captures and replay
   both used plain TCP successfully, so start TCP-only; KCP is a later
   optimization if the client insists.
-- zlib level matters: captures show the client compressing at LEVEL 0
-  (stored) for these messages. flate2 at level 0 emits a 5-byte empty
-  stored block per repeated sync-flush; `session.rs` drains by
-  buffer-fill rather than per-flush. Copy that, do not re-derive it.
+- zlib level matters: captures show the client compressing at level 0
+  (stored). The checked-out Apiimo revision has no session codec to copy.
+  Serviimo keeps one zlib encoder and decoder per direction, with level-0
+  compression and one flush per frame. Local tests cover state continuity;
+  a real-client capture must confirm the exact flush output.
 - Mod discipline: a mod that changes *where* the client connects is
   fine; one that changes *what* it sends will make every later bug
   ambiguous. Keep payload edits out (section 3).
@@ -269,27 +261,67 @@ mod's config-injection hook is the parallel escape hatch, and honestly
 the better long-term answer, but the vanilla repack is the thing that
 proves the CDN pivot works at all.
 
-## 8. Immediate next steps
+## 8. Next steps after the foundation
 
-1. Add `XdfContainer::repack` (write side) to
-   `../Apiimo_src/apiimo-network/src/lua.rs`, and prove it by reading
-   back a round-tripped container plus the modified `conf.json`.
-2. Generate a keypair; repack `LuaScripts.xdf` with our `pubKeyData`;
-   confirm `apiimo` can read the PEM back out of our own repacked file.
-3. Flip the `apiimo-network` path dependency on in `Cargo.toml`.
-4. `serviimo-gate`: listener, method 1 -> 19+10, method 2 acceptance
-   with private-key decrypt, log the recovered RC4 key and compare it
-   against the 20 bytes `LiveSession` generated locally.
-5. `serviimo-cdn`: hand-written `server_list_publish.json` over plain
-   HTTP first, to learn whether the client accepts http for the CDN
-   (each endpoint carries its own `is_ssl` flag in the list format).
-6. Point the client at it, watch the first real handshake arrive, and
-   iterate using the client's own error handling as the guide.
-7. Skeleton out `serviimo-mod`: a MelonLoader project with the
-   endpoint-override hook stubbed and nothing else, so it exists before
-   we need it.
+1. Verify the method 19 payload and RSA mode against the chosen client build.
+   The current Apiimo client needs APIIMO_RSA=oaep-sha1 to exercise OAEP-SHA1.
+2. Choose and complete the public-key delivery path: a future runtime
+   AniiSignal injection or an XDF repack. The foundation only emits the mod
+   config and does not implement the mod or edit Apiimo.
+3. Test one real client handshake and verifySdk request. The local tests prove
+   the implemented framing and crypto path, not compatibility with the game.
+4. Implement the world-gate connectServer and RoleService.CS_Login behavior.
+5. Connect the verified account/session to SQLite and add world-state updates.
+6. Add TLS and match the office response contracts when the client requires it.
 
 Skeleton created 2026-09-22; rewritten 2026-09-25 after the live
 protocol work settled the transport model, the ms-gate/world-gate
-split, and the lazy-msgpack save encoding. The stubs compile and carry
-the plan; nothing serves yet.
+split, and the lazy-msgpack save encoding. Foundation services now run,
+but the game login flow is not end-to-end.
+
+
+## 9. Foundation implementation notes and source findings
+
+The foundation adds a single-process runner, shared JSON configuration and CLI
+overrides, a TCP ms-gate, generated CDN server-list JSON, HTTP office stubs,
+SQLite account/world-state tables, and world-gate types. The world gate has no
+listener or ECS behavior. The gate returns a random local token and stub role
+metadata; it does not validate a production ticket.
+
+The gate key is stored as PKCS#1 PEM with mode 0600 on Unix. Only its public
+PEM is printed and written into the generated AniiSignal JSON. The mod source
+folder remains comments-only; the JSON is runtime configuration, not mod code.
+
+The checked-out Apiimo source differs from the protocol instructions in these
+ways:
+
+- The referenced apiimo-network/src/session.rs is absent. The current
+  client.rs has plain TCP framing and one-shot RC4 helpers, but no continuous
+  RC4 stream state or zlib stream codec. Serviimo implements the specified
+  continuous streams in its gate crate.
+- client.rs SessionKeyMaterial::rsa_wrap defaults to PKCS#1 v1.5. OAEP-SHA1
+  is available only when APIIMO_RSA=oaep-sha1; the Serviimo gate follows the
+  requested OAEP-SHA1 format.
+- OAEP encodes its own padding and cannot accept a plaintext zero-padded to the
+  RSA modulus length. Apiimo's OAEP branch encrypts the protobuf directly.
+  Serviimo likewise sends the unpadded protobuf to OAEP.
+- The checked-in client_gate.proto declares only EncryptKey.key field 2 and
+  token field 3, and declares EncryptKeyString empty. The Rust types in
+  handshake.rs instead encode head_padding field 1, key field 2, token field 3,
+  tail_padding field 4, and key_string field 1. The server follows the Rust
+  types because they match the requested client payload shape.
+- Apiimo's method 19 probe comment records two opaque 12-byte values. Its
+  common.proto GateInfo instead defines fields 1, 3, 4, 5, 6, and 7, so the
+  probe summary does not establish that method 19 is that GateInfo message.
+  The initial server push uses two 12-byte fields as placeholders.
+- The supplied dump.cs contains LoadSessionKey and office profiling DTOs such
+  as StartProfileSessionRequest and StartProfileSessionResponse, but searches
+  found no GateClientProtobufHandler, verifySdk, MsRequest,
+  responseEncryptToken, or confirmEncryptKeyAck identifiers. It does not
+  independently prove the RPC method IDs, protobuf fields, method 19 payload,
+  or zlib flush behavior; those details come from Apiimo and the supplied
+  protocol notes, not this dump.
+
+A successful local build or CDN curl check does not prove that the live client
+can log in. Follow the steps in section 8 to verify the protocol against the
+chosen client build before implementing world-gate behavior.
