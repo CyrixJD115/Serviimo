@@ -6,8 +6,8 @@
 //!   serviimo-gate   the phonest gate protocol over TCP
 //!   serviimo-world  ECS world simulation
 //!   serviimo-store  persistence
-//! See REPORT.md for the architecture and the tiered roadmap.
+//! See PLAN.md for the architecture and the tiered roadmap.
 
 fn main() {
-    println!("serviimo skeleton - nothing to serve yet; see REPORT.md");
+    println!("serviimo skeleton - nothing to serve yet; see PLAN.md");
 }

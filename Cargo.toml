@@ -28,5 +28,5 @@ serviimo-world = { path = "serviimo-world" }
 serviimo-store = { path = "serviimo-store" }
 
 # apiimo-network is consumed by path once Serviimo lives next to Apiimo_src;
-# see REPORT.md section "Reuse from Apiimo".
+# see PLAN.md section "Reuse from Apiimo".
 # apiimo-network = { path = "../Apiimo_src/apiimo-network" }
