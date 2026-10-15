@@ -10,6 +10,11 @@ A personal-use reimplementation of the Aniimo server side.
 See PLAN.md for feasibility, architecture, and the tiered roadmap.
 Status: skeleton only - stub crates plus the plan; nothing serves yet.
 
+## Docs
+- [Legal notice](LEGAL.md) — reverse-engineering statement, bring-your-own-game rule, acceptable use, DMCA policy
+- [Notice](NOTICE.md) — short-form disclaimer and attribution
+- [License](LICENSE) — GPL-3.0
+
 **Scope of use:** Serviimo is a private, self-hosted server for your own
 legitimately owned copy of the game and your own account. It is the intended
 companion for [AniiModLoader](https://github.com/CyrixJD115/AniiModLoader)
