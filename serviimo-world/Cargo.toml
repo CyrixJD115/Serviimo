@@ -7,3 +7,9 @@ license.workspace = true
 [dependencies]
 # Reuse Apiimo's connectServer and CS_Login message types for the world stub.
 apiimo-network = { path = "../../Apiimo_src/apiimo-network" }
+# The shipping client decodes property declaration fields and incremental
+# property values with cmsgpack.unpack after removing the protobuf envelope.
+rmpv = "1"
+# Ornament property values are MessagePack strings containing standard Base64
+# text before the game's compact binary record.
+base64 = "0.22"
